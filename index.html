@@ -28,6 +28,9 @@
   .step span{font-weight:800;font-size:16px;min-width:56px;text-align:center;font-variant-numeric:tabular-nums}
   .ctrl{display:flex;gap:8px}
   .ctrl button{flex:1;padding:9px 8px}
+  .ctrl .b-start,.ctrl .b-stop{flex:1.4}
+  .ctrl .b-reset{flex:.8;color:#a11}
+  .ctrl .b-reset:disabled{color:var(--ink)}
   button{font:inherit;border:none;border-radius:12px;padding:12px 10px;font-weight:700;cursor:pointer;touch-action:manipulation}
   .b-start{background:var(--accent);color:var(--accent-ink);font-size:18px}
   .b-stop{background:var(--ink);color:#fff;font-size:18px}
@@ -76,7 +79,7 @@
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:30;padding:20px}
   .modal.show{display:flex}
   .modal .box{background:#fff;border-radius:16px;padding:18px;max-width:360px;width:100%}
-  .modal p{margin:0 0 14px;font-size:16px}
+  .modal p{margin:0 0 14px;font-size:16px;white-space:pre-line}
   .best{color:var(--accent);font-weight:700}
   details summary{cursor:pointer;font-weight:700;font-size:16px}
 </style>
@@ -90,6 +93,7 @@
     <div class="ctrl">
       <button class="b-start" id="btnStart">スタート</button>
       <button class="b-sub" id="btnUndo" disabled>↶ 取り消し</button>
+      <button class="b-sub b-reset" id="btnReset">リセット</button>
     </div>
     <div class="lastbar" id="lastbar"><span style="color:var(--sub)">最後にタップした選手がここに出ます</span></div>
   </header>
@@ -102,7 +106,6 @@
     <div class="row">
       <button class="b-start" id="btnSend" style="display:none">スプシに送る</button>
       <button class="b-sub" id="btnCopy">結果をコピー</button>
-      <button class="b-sub" id="btnReset">リセット</button>
     </div>
     <div class="note">赤字は各選手のベストラップ。コピーした結果はLINEやExcelに貼り付けできます。</div>
   </section>
@@ -262,7 +265,7 @@ $('btnStart').onclick=()=>{
 $('btnUndo').onclick=()=>{const n=C().hist.pop();if(!n)return;const v=C().laps[n].pop();
   if(C().autoStop){C().stop=null;C().autoStop=false}
   delete lastTap[n];save();render();if(!running()&&C().start!=null&&(C().sentAt||C().needSend))markSend();toast(n+' の最後の記録を取り消しました')};
-$('btnReset').onclick=()=>ask(S.course+' の記録をすべて消してリセットしますか？',()=>{C().start=null;C().wallStart=null;C().sentAt=null;C().stop=null;C().autoStop=false;C().hist=[];S.names.forEach(n=>C().laps[n]=[]);for(const k in lastTap)delete lastTap[k];save();render()});
+$('btnReset').onclick=()=>{if(running()){toast('ストップしてからリセットしてください');return}const R=C();if(R.start==null){toast('リセットする記録はありません');return}ask(S.course+' の記録を消してリセットしますか？'+(R.needSend&&!R.sentAt?'\n※まだスプシに送れていません！':sending.has(S.course)?'\n※いまスプシに送信中です':'')+'',()=>{C().start=null;C().wallStart=null;C().sentAt=null;C().needSend=false;C().stop=null;C().autoStop=false;C().hist=[];S.names.forEach(n=>C().laps[n]=[]);for(const k in lastTap)delete lastTap[k];save();render()});}
 $('btnCopy').onclick=async()=>{
   const max=Math.max(0,...S.names.map(n=>C().laps[n].length));
   const d=new Date();let t=`${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${S.course}${C().target>0?'（'+C().target+'周）':''}\n`;
