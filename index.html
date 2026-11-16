@@ -71,7 +71,7 @@
   th:first-child,td:first-child{text-align:left}
   .tblwrap{overflow-x:auto}
   .note{font-size:12px;color:var(--sub);margin-top:6px}
-  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:999px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
+  .toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 8px);max-width:92vw;text-align:center;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:999px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
   .toast.show{opacity:1}
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:30;padding:20px}
   .modal.show{display:flex}
@@ -171,8 +171,7 @@ function tap(n,el){
   lastTap[n]=t;
   C().laps[n].push(t-C().start);C().hist.push(n);save();
   buzz(isDone(n)?[60,60,120]:40);
-  if(isDone(n))toast(n+' ゴール！ '+fmt(t-C().start));
-  if(C().target>0&&S.names.every(isDone)){C().stop=t;C().autoStop=true;save();toast('全員ゴールしました')}
+  if(C().target>0&&S.names.every(isDone)){C().stop=t;C().autoStop=true;save();toast('全員ゴールしました');markSend()}
   render();const nb=$('grid').children[S.names.indexOf(n)];if(nb){nb.classList.add('flash');setTimeout(()=>nb.classList.remove('flash'),350)}
 }
 
@@ -228,9 +227,10 @@ function renderSeg(){
       S.course=c;for(const k in lastTap)delete lastTap[k];save();render();toast(c+' に切り替えました')};
     g.appendChild(b)});
 }
+function safeBottom(){try{const d=document.createElement('div');d.style.cssText='position:fixed;bottom:0;height:env(safe-area-inset-bottom,0px)';document.body.appendChild(d);const h=d.offsetHeight;d.remove();return h}catch(e){return 0}}
 function fitGrid(){
   const g=$('grid'),n=S.names.length||1,gap=6;
-  const avail=Math.max(200,window.innerHeight-$('header').getBoundingClientRect().height-16);
+  const avail=Math.max(200,window.innerHeight-$('header').getBoundingClientRect().height-16-safeBottom()-24);
   const W=g.clientWidth||window.innerWidth-16;
   let pick=null;
   for(let cols=3;cols<=8;cols++){const rows=Math.ceil(n/cols),h=Math.floor((avail-gap*(rows-1))/rows),w=(W-gap*(cols-1))/cols;
@@ -246,22 +246,22 @@ function fitGrid(){
 window.addEventListener('resize',fitGrid);
 function renderStep(){const t=C().target;$('lapVal').textContent=t>0?t+'周':'自由';}
 function setTarget(t){const R=C();t=Math.max(0,t);R.target=t;
-  if(R.autoStop&&!S.names.every(isDone)){R.stop=null;R.autoStop=false;toast('周回を増やしたので計測を続けます')}
-  else if(running()&&t>0&&S.names.every(isDone)){R.stop=now();R.autoStop=true;toast('全員ゴールしました')}
+  if(R.autoStop&&!S.names.every(isDone)){R.stop=null;R.autoStop=false;R.sentAt=null;R.needSend=false;toast('周回を増やしたので計測を続けます')}
+  else if(running()&&t>0&&S.names.every(isDone)){R.stop=now();R.autoStop=true;toast('全員ゴールしました');setTimeout(markSend,0)}
   save();render();fillSettings();}
 function render(){if(typeof renderSend==='function')renderSend();renderStep();renderSeg();$('recTitle').textContent='記録 — '+S.course;fitGrid();renderGrid();renderLast();renderTable();renderCtrl();$('clock').textContent=fmt(elapsed())}
 
 $('btnStart').onclick=()=>{
   C().autoStop=false;
-  if(running()){C().stop=now()}
-  else if(C().start!=null){C().start+=now()-C().stop;C().stop=null} // resume: shift start (lap totals stay relative)
+  if(running()){C().stop=now();markSend()}
+  else if(C().start!=null){C().start+=now()-C().stop;C().stop=null;C().sentAt=null;C().needSend=false} // resume: shift start (lap totals stay relative)
   else{C().start=now();C().wallStart=Date.now();C().sentAt=null;C().stop=null;buzz(80)}
   save();render();
 };
 // note: on resume, shifting start keeps stored cumulative times consistent with paused time excluded
 $('btnUndo').onclick=()=>{const n=C().hist.pop();if(!n)return;const v=C().laps[n].pop();
   if(C().autoStop){C().stop=null;C().autoStop=false}
-  delete lastTap[n];save();render();toast(n+' の最後の記録を取り消しました')};
+  delete lastTap[n];save();render();if(!running()&&C().start!=null&&(C().sentAt||C().needSend))markSend();toast(n+' の最後の記録を取り消しました')};
 $('btnReset').onclick=()=>ask(S.course+' の記録をすべて消してリセットしますか？',()=>{C().start=null;C().wallStart=null;C().sentAt=null;C().stop=null;C().autoStop=false;C().hist=[];S.names.forEach(n=>C().laps[n]=[]);for(const k in lastTap)delete lastTap[k];save();render()});
 $('btnCopy').onclick=async()=>{
   const max=Math.max(0,...S.names.map(n=>C().laps[n].length));
@@ -282,24 +282,35 @@ $('btnSave').onclick=()=>{
 $('lapPlus').onclick=()=>setTarget(C().target+1);
 $('lapMinus').onclick=()=>{if(C().target<=1){toast('1周より少なくはできません');return}setTarget(C().target-1)};
 function pad(n){return String(n).padStart(2,'0')}
-async function sendSheet(){
-  const R=C();if(R.start==null||!S.names.some(n=>R.laps[n].length)){toast('送る記録がありません');return}
-  const st=new Date(R.wallStart||Date.now());
-  const payload={runId:S.course+'-'+(R.wallStart||R.start),date:`${st.getFullYear()}/${pad(st.getMonth()+1)}/${pad(st.getDate())}`,time:`${pad(st.getHours())}:${pad(st.getMinutes())}`,
-    course:S.course,target:R.target,rows:S.names.map((n,i)=>({no:i+1,name:n,laps:splits(R.laps[n]).map(ms=>Math.round(ms)/1000)}))};
-  const b=$('btnSend');b.disabled=true;b.textContent='送信中…';
+const sending=new Set();
+function markSend(){const R=C();if(!SHEET_URL||R.start==null)return;R.sentAt=null;R.needSend=true;save();renderSend();sendSheet(S.course,true)}
+async function sendSheet(course,auto){
+  course=course||S.course;const R=S.courses[course];
+  if(!SHEET_URL||sending.has(course))return;
+  if(R.start==null||!S.names.some(n=>R.laps[n]&&R.laps[n].length)){if(!auto)toast('送る記録がありません');R.needSend=false;save();renderSend();return}
+  const st=new Date(R.wallStart||R.start);
+  const payload={runId:course+'-'+(R.wallStart||R.start),date:`${st.getFullYear()}/${pad(st.getMonth()+1)}/${pad(st.getDate())}`,time:`${pad(st.getHours())}:${pad(st.getMinutes())}`,
+    course:course,target:R.target,rows:S.names.map((n,i)=>({no:i+1,name:n,laps:splits(R.laps[n]||[]).map(ms=>Math.round(ms)/1000)}))};
+  sending.add(course);renderSend();
+  let ok=false,info=null;
   try{
-    let ok=false,info=null;
-    try{const r=await fetch(SHEET_URL,{method:'POST',body:JSON.stringify(payload)});info=await r.json();ok=info&&info.ok}
-    catch(e){await fetch(SHEET_URL,{method:'POST',mode:'no-cors',body:JSON.stringify(payload)});ok=true;info=null}
-    if(ok){R.sentAt=Date.now();save();toast(info&&info.duplicate?'この記録はもう送ってあります':'スプシに送りました'+(info?'（'+info.added+'人）':''))}
-    else toast('送れませんでした：'+(info&&info.error||'不明なエラー'));
-  }catch(e){toast('送れませんでした。電波を確認してください')}
-  b.disabled=false;renderSend();
+    try{const r=await fetch(SHEET_URL,{method:'POST',body:JSON.stringify(payload)});info=await r.json();ok=!!(info&&info.ok)}
+    catch(e){if(!navigator.onLine)throw e;await fetch(SHEET_URL,{method:'POST',mode:'no-cors',body:JSON.stringify(payload)});ok=true;info=null}
+  }catch(e){ok=false}
+  sending.delete(course);
+  if(ok){R.sentAt=Date.now();R.needSend=false;save();toast(course+'の記録をスプシに送りました'+(info&&info.added!=null?'（'+info.added+'人）':''))}
+  else{R.needSend=true;save();toast(info&&info.error?'送れませんでした：'+info.error:'送れませんでした。電波が戻ったら自動で送ります')}
+  renderSend();
 }
-function renderSend(){const b=$('btnSend');if(!SHEET_URL){b.style.display='none';return}b.style.display='';b.textContent=C().sentAt?'スプシに送信済み ✓':'スプシに送る'}
-$('btnSend').onclick=()=>{if(running()){toast('ストップしてから送ってください');return}
-  if(C().sentAt){ask('この記録はもう送ってあります。もう一度送りますか？（同じ記録は二重には入りません）',sendSheet)}else sendSheet()};
+function retryPending(){if(!SHEET_URL||!navigator.onLine)return;COURSES.forEach(c=>{const R=S.courses[c];if(R.needSend&&!(c===S.course&&running()))sendSheet(c,true)})}
+window.addEventListener('online',retryPending);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')retryPending()});
+setTimeout(retryPending,1500);
+function renderSend(){const b=$('btnSend');if(!SHEET_URL){b.style.display='none';return}b.style.display='';const R=C();
+  b.disabled=sending.has(S.course);
+  b.textContent=sending.has(S.course)?'送信中…':R.sentAt?'スプシに送信済み ✓':R.needSend?'スプシに送る（未送信）':'スプシに送る';}
+$('btnSend').onclick=()=>{if(running()){toast('ストップすると自動で送られます');return}
+  if(C().sentAt){ask('この記録はもう送ってあります。もう一度送りますか？（同じ記録は二重には入りません）',()=>sendSheet(S.course,false))}else sendSheet(S.course,false)};
 fillSettings();render();
 setInterval(()=>{if(running())$('clock').textContent=fmt(elapsed())},47);
 </script>
