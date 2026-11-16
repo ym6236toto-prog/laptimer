@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ラップタイマー">
+<meta name="theme-color" content="#f4f1ec">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" href="icon.png">
+<title>ラップタイマー（選手タップ式）</title>
+<style>
+  :root{
+    --bg:#f4f1ec; --card:#fff; --ink:#1d1b18; --sub:#6b665e; --line:#e2ddd4;
+    --accent:#c8102e; --accent-ink:#fff; --done:#1f7a4d; --done-bg:#e6f3ec; --warn:#b26a00;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;}
+  .wrap{max-width:900px;margin:0 auto;padding:4px 8px 40px}
+  header{position:sticky;top:0;z-index:5;background:var(--bg);padding:6px 0 6px;border-bottom:1px solid var(--line)}
+  .clock{font-variant-numeric:tabular-nums;font-size:52px;font-weight:700;text-align:center;letter-spacing:1px;line-height:1.1}
+  .state{font-size:12px;color:var(--sub);flex:1;text-align:left;line-height:1.3}
+  .subrow{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+  .step{display:flex;align-items:center;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .step button{background:transparent;color:var(--ink);font-size:20px;padding:4px 14px;border-radius:0;line-height:1.2}
+  .step button:active{background:#eee}
+  .step span{font-weight:800;font-size:16px;min-width:56px;text-align:center;font-variant-numeric:tabular-nums}
+  .ctrl{display:flex;gap:8px}
+  .ctrl button{flex:1;padding:9px 8px}
+  button{font:inherit;border:none;border-radius:12px;padding:12px 10px;font-weight:700;cursor:pointer;touch-action:manipulation}
+  .b-start{background:var(--accent);color:var(--accent-ink);font-size:18px}
+  .b-stop{background:var(--ink);color:#fff;font-size:18px}
+  .b-sub{background:#e7e2d9;color:var(--ink)}
+  .b-sub:disabled{opacity:.4}
+  .grid{display:grid;grid-template-columns:repeat(var(--cols,4),1fr);gap:6px;margin-top:8px}
+  .ath{position:relative;background:var(--c);color:#fff;border:2px solid transparent;border-radius:10px;padding:2px 3px;height:var(--h,64px);text-align:center;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:0;transition:transform .05s;overflow:hidden}
+  .ath:active{transform:scale(.95)}
+  .ath .no{position:absolute;top:3px;left:4px;background:rgba(255,255,255,.92);color:var(--c);font-weight:900;font-size:11px;min-width:18px;height:18px;line-height:18px;border-radius:999px;padding:0 4px}
+  .ath .cnt{position:absolute;top:2px;right:5px;font-size:calc(var(--h,64px)*.27);font-weight:900;line-height:1;font-variant-numeric:tabular-nums;text-shadow:0 1px 2px rgba(0,0,0,.25)}
+  .ath .cnt small{font-size:.5em;font-weight:700;opacity:.85}
+  .ath .nm{font-size:var(--fs,16px);font-weight:900;line-height:1.1;margin-top:calc(var(--h,64px)*.22);text-shadow:0 1px 2px rgba(0,0,0,.25);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .ath .last{font-variant-numeric:tabular-nums;font-size:11px;font-weight:700;opacity:.95;line-height:1.2}
+  .grid.tiny .ath .last{display:none}
+  .ath.flash{border-color:#ffd400;box-shadow:0 0 0 3px #ffd400 inset;filter:brightness(1.15)}
+  .ath.done{background:#e9e6e0;color:#8a847a;border-color:var(--c)}
+  .ath.done .nm,.ath.done .cnt{text-shadow:none;color:var(--c)}
+  .ath.done .no{background:var(--c);color:#fff}
+  .ath.idle{opacity:.75}
+  .lastbar{margin-top:6px;border-radius:10px;padding:4px 10px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;gap:10px;min-height:34px;font-size:14px}
+  .lastbar .dot{width:16px;height:16px;border-radius:50%;flex:none}
+  .lastbar b{font-size:16px}
+  .lastbar .t{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:800;font-size:16px}
+  .clock{font-size:34px}
+  .seg{display:flex;background:#e7e2d9;border-radius:10px;padding:3px;gap:3px;margin-bottom:2px}
+  .seg button{flex:1;background:transparent;color:var(--sub);padding:5px 4px;font-size:15px;border-radius:8px}
+  .seg button.on{background:var(--ink);color:#fff}
+  .seg button small{display:inline;margin-left:4px;font-size:11px;font-weight:600;opacity:.8}
+  .seg button .rec{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-left:4px;vertical-align:middle}
+  .row{display:flex;gap:8px;margin-top:12px}
+  .row button{flex:1}
+  section.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:14px}
+  h2{font-size:16px;margin:0 0 10px}
+  label{display:block;font-size:13px;color:var(--sub);margin:10px 0 4px}
+  textarea,input{width:100%;font:inherit;font-size:16px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fcfbf9}
+  textarea{min-height:130px}
+  .two{display:flex;gap:10px}
+  .two>div{flex:1}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14px}
+  th,td{border-bottom:1px solid var(--line);padding:6px 4px;text-align:right;white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  .tblwrap{overflow-x:auto}
+  .note{font-size:12px;color:var(--sub);margin-top:6px}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:999px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
+  .toast.show{opacity:1}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:30;padding:20px}
+  .modal.show{display:flex}
+  .modal .box{background:#fff;border-radius:16px;padding:18px;max-width:360px;width:100%}
+  .modal p{margin:0 0 14px;font-size:16px}
+  .best{color:var(--accent);font-weight:700}
+  details summary{cursor:pointer;font-weight:700;font-size:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header id="header">
+    <div class="seg" id="seg"></div>
+    <div class="clock" id="clock">0:00.00</div>
+    <div class="subrow"><div class="state" id="state">待機中</div><div class="step"><button id="lapMinus">−</button><span id="lapVal">3周</span><button id="lapPlus">＋</button></div></div>
+    <div class="ctrl">
+      <button class="b-start" id="btnStart">スタート</button>
+      <button class="b-sub" id="btnUndo" disabled>↶ 取り消し</button>
+    </div>
+    <div class="lastbar" id="lastbar"><span style="color:var(--sub)">最後にタップした選手がここに出ます</span></div>
+  </header>
+
+  <div class="grid" id="grid"></div>
+
+  <section class="card">
+    <h2 id="recTitle">記録</h2>
+    <div class="tblwrap"><table id="tbl"></table></div>
+    <div class="row">
+      <button class="b-sub" id="btnCopy">結果をコピー</button>
+      <button class="b-sub" id="btnReset">リセット</button>
+    </div>
+    <div class="note">赤字は各選手のベストラップ。コピーした結果はLINEやExcelに貼り付けできます。</div>
+  </section>
+
+  <section class="card">
+    <details id="settings">
+      <summary>設定（選手名・コースの周回数）</summary>
+      <label>選手名（1行に1人）</label>
+      <textarea id="names"></textarea>
+      <label>コースごとの周回数（0 = 制限なし）</label>
+      <div class="two">
+        <div><label>ショート</label><input type="number" id="target0" min="0" inputmode="numeric"></div>
+        <div><label>ロング</label><input type="number" id="target1" min="0" inputmode="numeric"></div>
+        <div><label>超ロング</label><input type="number" id="target2" min="0" inputmode="numeric"></div>
+      </div>
+      <label>連打防止（秒）</label>
+      <input type="number" id="lock" min="0" step="0.5" inputmode="decimal">
+      <div class="row"><button class="b-start" id="btnSave">保存</button></div>
+      <div class="note">連打防止：同じ選手のボタンを押してから指定秒数は反応しません（押し間違い防止）。選手名の変更は計測していないときに行ってください。</div>
+    </details>
+  </section>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="modal" id="modal"><div class="box"><p id="mText"></p><div class="row" style="margin-top:0"><button class="b-sub" id="mNo">やめる</button><button class="b-start" id="mYes">OK</button></div></div></div>
+
+<script>
+const KEY='karate-laptimer-v2';
+const COURSES=['ショート','ロング','超ロング'];
+const BAKED=['あいら','あんな','とわ','けんしろう','あきと','はるま','みな','そら','りょうが','そうた','ゆうと','しゅう','つばき','ゆうま','さく','とき','りょうま'];
+const DEF_T={'ショート':3,'ロング':1,'超ロング':1};
+function newRun(t){return {target:t,start:null,stop:null,autoStop:false,laps:{},hist:[]}}
+let S;
+function load(){try{S=JSON.parse(localStorage.getItem(KEY))||null}catch(e){S=null}
+  if(!S){let old=null;try{old=JSON.parse(localStorage.getItem('karate-laptimer-v1'))}catch(e){}
+    S={names:BAKED.slice(),lock:old&&old.lock!=null?old.lock:3,course:'ロング',courses:{}};}
+  COURSES.forEach(c=>{if(!S.courses[c])S.courses[c]=newRun(DEF_T[c])});
+  if(S.nv!==2){S.names=BAKED.slice();S.nv=2}
+  if(S.tv!==2){COURSES.forEach(c=>S.courses[c].target=DEF_T[c]);S.tv=2}
+  COURSES.forEach(c=>S.names.forEach(n=>{if(!S.courses[c].laps[n])S.courses[c].laps[n]=[]}));}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function C(){return S.courses[S.course]}
+load();
+
+const $=id=>document.getElementById(id);
+function fmt(ms){if(ms==null)return'—';ms=Math.max(0,ms);const cs=Math.floor(ms/10)%100,s=Math.floor(ms/1000)%60,m=Math.floor(ms/60000);
+  return m+':'+String(s).padStart(2,'0')+'.'+String(cs).padStart(2,'0');}
+function now(){return Date.now()}
+function running(){return C().start!=null&&C().stop==null}
+function elapsed(){if(C().start==null)return 0;return (C().stop??now())-C().start}
+// laps stored as cumulative ms from start
+function splits(arr){return arr.map((t,i)=>t-(i?arr[i-1]:0))}
+function isDone(n){return C().target>0&&C().laps[n].length>=C().target}
+
+function toast(t){const e=$('toast');e.textContent=t;e.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('show'),1400)}
+function ask(t,cb){$('mText').textContent=t;$('modal').classList.add('show');$('mYes').onclick=()=>{$('modal').classList.remove('show');cb()};$('mNo').onclick=()=>$('modal').classList.remove('show')}
+function buzz(p){try{navigator.vibrate&&navigator.vibrate(p)}catch(e){}}
+
+const lastTap={};
+function tap(n,el){
+  if(!running()){toast('先にスタートを押してください');return}
+  if(isDone(n)){toast(n+' はゴール済みです');return}
+  const t=now();
+  if(lastTap[n]&&t-lastTap[n]<S.lock*1000){return}
+  lastTap[n]=t;
+  C().laps[n].push(t-C().start);C().hist.push(n);save();
+  buzz(isDone(n)?[60,60,120]:40);
+  if(isDone(n))toast(n+' ゴール！ '+fmt(t-C().start));
+  if(C().target>0&&S.names.every(isDone)){C().stop=t;C().autoStop=true;save();toast('全員ゴールしました')}
+  render();const nb=$('grid').children[S.names.indexOf(n)];if(nb){nb.classList.add('flash');setTimeout(()=>nb.classList.remove('flash'),350)}
+}
+
+const COLORS=['#d62828','#1d4ed8','#15803d','#ea7a00','#7c3aed','#0e7490','#be185d','#4d7c0f','#92400e','#334155','#c2410c','#0f766e','#6d28d9','#b91c1c','#1e40af','#a16207','#0284c7','#57534e'];
+function col(n){return COLORS[S.names.indexOf(n)%COLORS.length]}
+function renderLast(){
+  const e=$('lastbar'),n=C().hist[C().hist.length-1];
+  if(!n){e.innerHTML='<span style="color:var(--sub)">最後にタップした選手がここに出ます</span>';return}
+  const arr=C().laps[n],sp=splits(arr);
+  e.innerHTML=`<span class="dot" style="background:${col(n)}"></span><span><b></b>　${arr.length}周目${isDone(n)?' ゴール':''}</span><span class="t">${fmt(sp[sp.length-1])}</span>`;
+  e.querySelector('b').textContent=(S.names.indexOf(n)+1)+'. '+n;
+}
+function renderGrid(){
+  const g=$('grid');g.innerHTML='';
+  S.names.forEach((n,i)=>{
+    const arr=C().laps[n],sp=splits(arr),b=document.createElement('button');
+    b.className='ath'+(isDone(n)?' done':'')+(!running()&&!arr.length?' idle':'');
+    b.style.setProperty('--c',col(n));
+    b.innerHTML=`<span class="no">${i+1}</span>
+      <span class="cnt">${isDone(n)?'✓':arr.length}${C().target>0&&!isDone(n)?`<small>/${C().target}</small>`:''}</span>
+      <div class="nm"></div>
+      <div class="last">${sp.length?fmt(sp[sp.length-1]):'—'}</div>`;
+    b.querySelector('.nm').textContent=n;
+    b.addEventListener('pointerdown',e=>{e.preventDefault();tap(n,b)});
+    g.appendChild(b);
+  });
+}
+function renderTable(){
+  const max=Math.max(0,...S.names.map(n=>C().laps[n].length));
+  let h='<tr><th>選手</th>';for(let i=1;i<=max;i++)h+=`<th>${i}周</th>`;h+='<th>合計</th><th>平均</th></tr>';
+  // ranking: done first by total, then more laps
+  const order=[...S.names].sort((a,b)=>{const A=C().laps[a],B=C().laps[b];if(B.length!==A.length)return B.length-A.length;return (A[A.length-1]??1e15)-(B[B.length-1]??1e15)});
+  order.forEach(n=>{const arr=C().laps[n],sp=splits(arr),best=sp.length?Math.min(...sp):null;
+    h+=`<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${col(n)};margin-right:6px"></span>${S.names.indexOf(n)+1}. ${esc(n)}</td>`;for(let i=0;i<max;i++)h+=`<td class="${sp[i]===best&&sp.length>1?'best':''}">${sp[i]!=null?fmt(sp[i]):''}</td>`;
+    h+=`<td><b>${arr.length?fmt(arr[arr.length-1]):'—'}</b></td><td>${sp.length?fmt(arr[arr.length-1]/sp.length):'—'}</td></tr>`});
+  $('tbl').innerHTML=h;
+}
+function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function renderCtrl(){
+  const b=$('btnStart');
+  if(running()){b.textContent='ストップ';b.className='b-stop';$('state').textContent='計測中：通過したら名前をタップ'}
+  else if(C().start!=null){b.textContent='再開';b.className='b-start';$('state').textContent='停止中'}
+  else{b.textContent='スタート';b.className='b-start';$('state').textContent='待機中：スタートで計測開始'}
+  $('btnUndo').disabled=!C().hist.length;
+}
+function renderSeg(){
+  const g=$('seg');g.innerHTML='';
+  COURSES.forEach(c=>{const R=S.courses[c],b=document.createElement('button');
+    const has=R.start!=null;
+    b.className=c===S.course?'on':'';
+    b.innerHTML=`${c}${has?'<span class="rec"></span>':''}<small>${R.target>0?R.target+'周':'周回自由'}</small>`;
+    b.onclick=()=>{if(c===S.course)return;if(running()){toast('計測中はコースを変えられません。ストップしてから選んでください');return}
+      S.course=c;for(const k in lastTap)delete lastTap[k];save();render();toast(c+' に切り替えました')};
+    g.appendChild(b)});
+}
+function fitGrid(){
+  const g=$('grid'),n=S.names.length||1,gap=6;
+  const avail=Math.max(200,window.innerHeight-$('header').getBoundingClientRect().height-16);
+  const W=g.clientWidth||window.innerWidth-16;
+  let pick=null;
+  for(let cols=3;cols<=8;cols++){const rows=Math.ceil(n/cols),h=Math.floor((avail-gap*(rows-1))/rows),w=(W-gap*(cols-1))/cols;
+    if(w<62)break; pick={cols,h:Math.min(h,96)}; if(h>=60)break;}
+  if(!pick)pick={cols:3,h:60};
+  pick.h=Math.max(pick.h,44);
+  const w=(W-gap*(pick.cols-1))/pick.cols;
+  const longest=Math.max(...S.names.map(x=>[...x].length),2);
+  const fs=Math.max(11,Math.min(pick.h*.3,(w-8)/longest,24));
+  g.style.setProperty('--cols',pick.cols);g.style.setProperty('--h',pick.h+'px');g.style.setProperty('--fs',fs+'px');
+  g.classList.toggle('tiny',pick.h<58);
+}
+window.addEventListener('resize',fitGrid);
+function renderStep(){const t=C().target;$('lapVal').textContent=t>0?t+'周':'自由';}
+function setTarget(t){const R=C();t=Math.max(0,t);R.target=t;
+  if(R.autoStop&&!S.names.every(isDone)){R.stop=null;R.autoStop=false;toast('周回を増やしたので計測を続けます')}
+  else if(running()&&t>0&&S.names.every(isDone)){R.stop=now();R.autoStop=true;toast('全員ゴールしました')}
+  save();render();fillSettings();}
+function render(){renderStep();renderSeg();$('recTitle').textContent='記録 — '+S.course;fitGrid();renderGrid();renderLast();renderTable();renderCtrl();$('clock').textContent=fmt(elapsed())}
+
+$('btnStart').onclick=()=>{
+  C().autoStop=false;
+  if(running()){C().stop=now()}
+  else if(C().start!=null){C().start+=now()-C().stop;C().stop=null} // resume: shift start (lap totals stay relative)
+  else{C().start=now();C().stop=null;buzz(80)}
+  save();render();
+};
+// note: on resume, shifting start keeps stored cumulative times consistent with paused time excluded
+$('btnUndo').onclick=()=>{const n=C().hist.pop();if(!n)return;const v=C().laps[n].pop();
+  if(C().autoStop){C().stop=null;C().autoStop=false}
+  delete lastTap[n];save();render();toast(n+' の最後の記録を取り消しました')};
+$('btnReset').onclick=()=>ask(S.course+' の記録をすべて消してリセットしますか？',()=>{C().start=null;C().stop=null;C().autoStop=false;C().hist=[];S.names.forEach(n=>C().laps[n]=[]);for(const k in lastTap)delete lastTap[k];save();render()});
+$('btnCopy').onclick=async()=>{
+  const max=Math.max(0,...S.names.map(n=>C().laps[n].length));
+  const d=new Date();let t=`${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${S.course}${C().target>0?'（'+C().target+'周）':''}\n`;
+  t+='選手\t'+Array.from({length:max},(_,i)=>(i+1)+'周').join('\t')+'\t合計\n';
+  S.names.forEach(n=>{const arr=C().laps[n],sp=splits(arr);t+=n+'\t'+Array.from({length:max},(_,i)=>sp[i]!=null?fmt(sp[i]):'').join('\t')+'\t'+(arr.length?fmt(arr[arr.length-1]):'')+'\n'});
+  try{await navigator.clipboard.writeText(t);toast('コピーしました')}catch(e){toast('コピーできませんでした')}
+};
+function fillSettings(){$('names').value=S.names.join('\n');COURSES.forEach((c,i)=>$('target'+i).value=S.courses[c].target);$('lock').value=S.lock}
+$('btnSave').onclick=()=>{
+  const names=[...new Set($('names').value.split('\n').map(s=>s.trim()).filter(Boolean))];
+  if(!names.length){toast('選手名を入力してください');return}
+  S.names=names;COURSES.forEach((c,i)=>{const R=S.courses[c];names.forEach(n=>{if(!R.laps[n])R.laps[n]=[]});R.hist=R.hist.filter(n=>names.includes(n));
+    R.target=Math.max(0,parseInt($('target'+i).value)||0)});
+  S.lock=Math.max(0,parseFloat($('lock').value)||0);
+  save();render();$('settings').open=false;toast('保存しました');
+};
+$('lapPlus').onclick=()=>setTarget(C().target+1);
+$('lapMinus').onclick=()=>{if(C().target<=1){toast('1周より少なくはできません');return}setTarget(C().target-1)};
+fillSettings();render();
+setInterval(()=>{if(running())$('clock').textContent=fmt(elapsed())},47);
+</script>
+</body>
+</html>
