@@ -100,6 +100,7 @@
     <h2 id="recTitle">記録</h2>
     <div class="tblwrap"><table id="tbl"></table></div>
     <div class="row">
+      <button class="b-start" id="btnSend" style="display:none">スプシに送る</button>
       <button class="b-sub" id="btnCopy">結果をコピー</button>
       <button class="b-sub" id="btnReset">リセット</button>
     </div>
@@ -131,6 +132,7 @@
 <script>
 const KEY='karate-laptimer-v2';
 const COURSES=['ショート','ロング','超ロング'];
+const SHEET_URL='https://script.google.com/macros/s/AKfycby-CY10MJZCzuV45sMhuDd3CzSA7EsPiZTwphCpF5DpRvnvScpPSTqFnTXTtkZ8BAmanw/exec';
 const BAKED=['あいら','あんな','とわ','けんしろう','あきと','はるま','みな','そら','りょうが','そうた','ゆうと','しゅう','つばき','ゆうま','さく','とき','りょうま'];
 const DEF_T={'ショート':3,'ロング':1,'超ロング':1};
 function newRun(t){return {target:t,start:null,stop:null,autoStop:false,laps:{},hist:[]}}
@@ -247,20 +249,20 @@ function setTarget(t){const R=C();t=Math.max(0,t);R.target=t;
   if(R.autoStop&&!S.names.every(isDone)){R.stop=null;R.autoStop=false;toast('周回を増やしたので計測を続けます')}
   else if(running()&&t>0&&S.names.every(isDone)){R.stop=now();R.autoStop=true;toast('全員ゴールしました')}
   save();render();fillSettings();}
-function render(){renderStep();renderSeg();$('recTitle').textContent='記録 — '+S.course;fitGrid();renderGrid();renderLast();renderTable();renderCtrl();$('clock').textContent=fmt(elapsed())}
+function render(){if(typeof renderSend==='function')renderSend();renderStep();renderSeg();$('recTitle').textContent='記録 — '+S.course;fitGrid();renderGrid();renderLast();renderTable();renderCtrl();$('clock').textContent=fmt(elapsed())}
 
 $('btnStart').onclick=()=>{
   C().autoStop=false;
   if(running()){C().stop=now()}
   else if(C().start!=null){C().start+=now()-C().stop;C().stop=null} // resume: shift start (lap totals stay relative)
-  else{C().start=now();C().stop=null;buzz(80)}
+  else{C().start=now();C().wallStart=Date.now();C().sentAt=null;C().stop=null;buzz(80)}
   save();render();
 };
 // note: on resume, shifting start keeps stored cumulative times consistent with paused time excluded
 $('btnUndo').onclick=()=>{const n=C().hist.pop();if(!n)return;const v=C().laps[n].pop();
   if(C().autoStop){C().stop=null;C().autoStop=false}
   delete lastTap[n];save();render();toast(n+' の最後の記録を取り消しました')};
-$('btnReset').onclick=()=>ask(S.course+' の記録をすべて消してリセットしますか？',()=>{C().start=null;C().stop=null;C().autoStop=false;C().hist=[];S.names.forEach(n=>C().laps[n]=[]);for(const k in lastTap)delete lastTap[k];save();render()});
+$('btnReset').onclick=()=>ask(S.course+' の記録をすべて消してリセットしますか？',()=>{C().start=null;C().wallStart=null;C().sentAt=null;C().stop=null;C().autoStop=false;C().hist=[];S.names.forEach(n=>C().laps[n]=[]);for(const k in lastTap)delete lastTap[k];save();render()});
 $('btnCopy').onclick=async()=>{
   const max=Math.max(0,...S.names.map(n=>C().laps[n].length));
   const d=new Date();let t=`${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${S.course}${C().target>0?'（'+C().target+'周）':''}\n`;
@@ -279,6 +281,25 @@ $('btnSave').onclick=()=>{
 };
 $('lapPlus').onclick=()=>setTarget(C().target+1);
 $('lapMinus').onclick=()=>{if(C().target<=1){toast('1周より少なくはできません');return}setTarget(C().target-1)};
+function pad(n){return String(n).padStart(2,'0')}
+async function sendSheet(){
+  const R=C();if(R.start==null||!S.names.some(n=>R.laps[n].length)){toast('送る記録がありません');return}
+  const st=new Date(R.wallStart||Date.now());
+  const payload={runId:S.course+'-'+(R.wallStart||R.start),date:`${st.getFullYear()}/${pad(st.getMonth()+1)}/${pad(st.getDate())}`,time:`${pad(st.getHours())}:${pad(st.getMinutes())}`,
+    course:S.course,target:R.target,rows:S.names.map((n,i)=>({no:i+1,name:n,laps:splits(R.laps[n]).map(ms=>Math.round(ms)/1000)}))};
+  const b=$('btnSend');b.disabled=true;b.textContent='送信中…';
+  try{
+    let ok=false,info=null;
+    try{const r=await fetch(SHEET_URL,{method:'POST',body:JSON.stringify(payload)});info=await r.json();ok=info&&info.ok}
+    catch(e){await fetch(SHEET_URL,{method:'POST',mode:'no-cors',body:JSON.stringify(payload)});ok=true;info=null}
+    if(ok){R.sentAt=Date.now();save();toast(info&&info.duplicate?'この記録はもう送ってあります':'スプシに送りました'+(info?'（'+info.added+'人）':''))}
+    else toast('送れませんでした：'+(info&&info.error||'不明なエラー'));
+  }catch(e){toast('送れませんでした。電波を確認してください')}
+  b.disabled=false;renderSend();
+}
+function renderSend(){const b=$('btnSend');if(!SHEET_URL){b.style.display='none';return}b.style.display='';b.textContent=C().sentAt?'スプシに送信済み ✓':'スプシに送る'}
+$('btnSend').onclick=()=>{if(running()){toast('ストップしてから送ってください');return}
+  if(C().sentAt){ask('この記録はもう送ってあります。もう一度送りますか？（同じ記録は二重には入りません）',sendSheet)}else sendSheet()};
 fillSettings();render();
 setInterval(()=>{if(running())$('clock').textContent=fmt(elapsed())},47);
 </script>
