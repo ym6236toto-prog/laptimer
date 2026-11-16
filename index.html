@@ -237,7 +237,7 @@ function fitGrid(){
   pick.h=Math.max(pick.h,44);
   const w=(W-gap*(pick.cols-1))/pick.cols;
   const longest=Math.max(...S.names.map(x=>[...x].length),2);
-  const fs=Math.max(11,Math.min(pick.h*.3,(w-8)/longest,24));
+  const fs=Math.max(11,Math.min(pick.h*.3,(w-16)/(longest+0.3),24));
   g.style.setProperty('--cols',pick.cols);g.style.setProperty('--h',pick.h+'px');g.style.setProperty('--fs',fs+'px');
   g.classList.toggle('tiny',pick.h<58);
 }
